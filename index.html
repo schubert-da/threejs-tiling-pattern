@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+    <title> Tiled Pattern </title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/100/three.min.js" integrity="sha512-PWicXuUyNjtNOMD07lPzvfU0LyteTrsmBfs1NhVAMFGnWI1v9HF4XmIHPJDbG59Yp/Q9EIvPlD4PXB5TA18mMg==" crossorigin="anonymous"></script>    </head>
+    <script src="https://unpkg.com/three@0.85.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.7.7/dat.gui.min.js" integrity="sha512-LF8ZB1iTwi4Qvkm4pekHG4a437Y9Af5ZuwbnW4GTbAWQeR2E4KW8WF+xH8b9psevV7wIlDMx1MH9YfPqgKhA/Q==" crossorigin="anonymous"></script>
+    
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+        }
+
+        .header{
+            position: absolute;
+            width: 420px;
+            top: 20px;
+            left: 20px;
+
+            padding: 5px 10px;
+            
+            font-family: Helvetica;
+            font-size: 14px;
+            background-color: #ddd;
+        }
+    </style>
+</head>
+<body>
+    <div class="header"> 
+        Move your mouse over a cube to increase its height.<br>
+        Left-clicking the cube will lock its height, click again to undo this.<br>
+        Right-click will reset the cube to its initial height.
+        <br><br>
+        When not hovering over a cube, the mouse buttons can be used to adjust the camera.
+    </div>
+
+    <!-- Div which will hold the Output -->
+    <div id="WebGL-output"></div>
+
+<script type="text/javascript">
+    function init() {
+
+        static_cubes = [];
+
+        // create a scene, that will hold all our elements such as objects, cameras and lights.
+        scene = new THREE.Scene();
+
+        // create a camera, which defines where we're looking at.
+        camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+
+        spotLight = new THREE.SpotLight(0xffffff, 1);
+        spotLight.angle = Math.PI / 2;
+        spotLight.penumbra = 0.05;
+        spotLight.decay = 2;
+        scene.add(spotLight);
+
+        ambientLight = new THREE.AmbientLight( 0x444444, 1 ); 
+        scene.add( ambientLight );
+
+        // create a render and set the size
+        renderer = new THREE.WebGLRenderer();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+
+        // create the ground plane
+        planeGeometry = new THREE.BoxGeometry(1000, 0, 1000);
+        planeMaterial = new THREE.MeshLambertMaterial({color: 0xcccccc});
+        plane = new THREE.Mesh(planeGeometry, planeMaterial);
+        plane.receiveShadow = true;
+        scene.add(plane);
+        
+        // create grid of cubes
+        for(var row=0; row< 10; row++){
+            for(var col=0; col< 10; col++){
+                createCube(5 + col*10, 5.05, 5 + row*10)
+            }
+        }
+
+        // position and point the camera to the center of the scene
+        camera.position.x = -37.10;
+        camera.position.y = 84.49;
+        camera.position.z = -25.11;
+        
+        // mouse positions that will be used with the raycaster
+        mouse = new THREE.Vector2();
+        mouse.x = mouse.y = -1;
+
+        rayCast = new THREE.Raycaster();
+
+        controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.target = new THREE.Vector3(50,10,50)
+
+        // add the output of the renderer to the html element
+        document.getElementById("WebGL-output").appendChild(renderer.domElement);
+
+        // add event listeners for hovering and clicking of the mouse
+        document.addEventListener("mousemove", onMouseMove, false);
+        document.addEventListener("mousedown", onMouseClick, false);
+
+        // render the scene
+        renderer.render(scene, camera);
+
+        // Initial values for all params
+        var gui_controls = {
+            GRID_COLOR: 0x666666,
+
+            SPOTLIGHT_X: 100,
+            SPOTLIGHT_Y: 55,
+            SPOTLIGHT_Z: 100,
+            SPOTLIGHT_DISTANCE: 350,
+            SPOTLIGHT_INTENSITY: 1.3,
+
+            AMBIENT_COLOR: 0x404040,
+            AMBIENT_INTENSITY: 1,
+
+        }
+
+        // Uncomment below section for dat.GUI controls
+
+        /*
+        var gui = new dat.GUI();
+
+        var grid_controls = gui.addFolder("grid")
+        grid_controls.addColor(gui_controls, "GRID_COLOR").onChange(()=>{
+            scene.traverse( (object) =>{
+                if(object.material && object!=plane)
+                object.material.color.set( gui_controls.GRID_COLOR )})
+        });
+
+        var spotlight_controls = gui.addFolder("spotlight")
+        spotlight_controls.add(gui_controls, "SPOTLIGHT_X").min(0).max(200).step(5).onChange(updateParams);
+        spotlight_controls.add(gui_controls, "SPOTLIGHT_Y").min(0).max(200).step(5).onChange(updateParams);
+        spotlight_controls.add(gui_controls, "SPOTLIGHT_Z").min(0).max(200).step(5).onChange(updateParams);
+        spotlight_controls.add(gui_controls, "SPOTLIGHT_DISTANCE").min(0).max(1000).step(5).onChange(updateParams);
+        spotlight_controls.add(gui_controls, "SPOTLIGHT_INTENSITY").min(0).max(2).onChange(updateParams);
+
+        var ambient_light_controls = gui.addFolder("ambient light") 
+        ambient_light_controls.addColor(gui_controls, "AMBIENT_COLOR").onChange(updateParams);
+        ambient_light_controls.add(gui_controls, "AMBIENT_INTENSITY").min(0).max(2).onChange(updateParams);
+        
+        */
+
+        updateParams()
+
+        function updateParams(){
+            spotLight.position.x = gui_controls.SPOTLIGHT_X
+            spotLight.position.y = gui_controls.SPOTLIGHT_Y 
+            spotLight.position.z = gui_controls.SPOTLIGHT_Z
+            spotLight.distance = gui_controls.SPOTLIGHT_DISTANCE
+            spotLight.intensity = gui_controls.SPOTLIGHT_INTENSITY
+
+            ambientLight.intensity = gui_controls.AMBIENT_INTENSITY
+            ambientLight.color = new THREE.Color(gui_controls.AMBIENT_COLOR)
+        };
+
+    }
+
+    function createCube(x, y, z){
+
+        // create a cube
+        var cubeGeometry = new THREE.BoxGeometry(9.5, 10, 9.5);
+        var cubeMaterial = new THREE.MeshLambertMaterial({color: 0xffffff});
+        var cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
+
+        // position the cube
+        cube.position.x = x;
+        cube.position.y = y;
+        cube.position.z = z;
+
+        // add the cube to the scene
+        scene.add(cube);
+    }
+
+    function onMouseClick( event ) {
+        var intersects = rayCast.intersectObjects( scene.children );
+
+        if(intersects[0]){
+            var current_object = intersects[0].object
+
+            if(current_object != plane){
+                switch(event.button){
+                    // left-click pauses/unpauses growing based on current state
+                    case 0: 
+                        // check if the cube is meant to be static
+                        if(static_cubes.includes(current_object)){
+                            current_object.material.color.set( 0xffffff);
+
+                            // remove from list of static cubes
+                            var object_index = static_cubes.indexOf(current_object);
+                            static_cubes.splice(object_index, 1);
+                        }
+                        else{
+                            current_object.material.color.set( 0x999999);
+                            static_cubes.push(current_object); // add to list of static cubes
+                        }
+                        
+                        break;
+                    
+                    // right-click resets to initial height
+                    case 2:
+                        current_object.scale.y = 1;
+
+                        // remove it from the list of static cubes, if applicable
+                        if(static_cubes.includes(current_object)){
+                            current_object.material.color.set( 0xffffff);
+                            var object_index = static_cubes.indexOf(current_object);
+                            static_cubes.splice(object_index, 1);
+                        }
+                        
+                        break;
+                }
+                
+            }
+        }
+    }
+
+    function onMouseMove( event ) {
+        // update the mouse coordinates
+        mouse.x =  ( event.clientX / window.innerWidth ) * 2 - 1;
+        mouse.y = -( event.clientY / window.innerHeight ) * 2 + 1;
+
+        var intersects = rayCast.intersectObjects( scene.children );
+        
+        // check if there is at least one object
+        if(intersects[0]){
+            var current_object = intersects[0].object
+
+            if(current_object != plane && !(static_cubes.includes(current_object))){
+                current_object.scale.y += 0.06 // grow the cube height
+            }
+        }
+    }
+
+    let mainLoop = function() {
+        controls.update();
+
+        rayCast.setFromCamera( mouse, camera );
+        
+        // decrease the heights of altered cubes over time
+        scene.traverse( (object) =>{
+            if(object != plane && !(static_cubes.includes(object)) ){
+                if(object.scale.y > 1) object.scale.y -= 0.0020
+            }
+        })
+
+        renderer.render(scene, camera);
+        requestAnimationFrame(mainLoop);
+    };
+
+    init();
+    mainLoop()
+
+</script>
+</body>
+</html>
